@@ -1,0 +1,77 @@
+# ==============================================================================
+# UNINOTAS - DOCKER COMPOSE CONFIGURATION
+# Arquitectura de 2 Contenedores (Web App PHP 8.0 + MS SQL Server 2022)
+# ==============================================================================
+
+name: uninotas
+
+services:
+  # ----------------------------------------------------------------------------
+  # Servicio 1: Servidor Web (Apache + PHP 8.0 + PDO SQLSRV)
+  # ----------------------------------------------------------------------------
+  web:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: uninotas_web
+    restart: always
+    ports:
+      - "8080:80"
+    volumes:
+      - ./app:/var/www/html
+    env_file:
+      - .env
+    environment:
+      - DB_HOST=sqlserver
+      - DB_PORT=1433
+      - DB_NAME=${DB_NAME}
+      - DB_USER_RW=${DB_USER_RW}
+      - DB_PASSWORD_RW=${DB_PASSWORD_RW}
+      - DB_USER_RO=${DB_USER_RO}
+      - DB_PASSWORD_RO=${DB_PASSWORD_RO}
+      - APP_ADMIN_USER=${APP_ADMIN_USER}
+      - APP_ADMIN_PASS=${APP_ADMIN_PASS}
+      - APP_VIEWER_USER=${APP_VIEWER_USER}
+      - APP_VIEWER_PASS=${APP_VIEWER_PASS}
+    depends_on:
+      sqlserver:
+        condition: service_healthy
+    networks:
+      - uninotas_net
+
+  # ----------------------------------------------------------------------------
+  # Servicio 2: Base de Datos Microsoft SQL Server 2022
+  # ----------------------------------------------------------------------------
+  sqlserver:
+    build:
+      context: ./db
+      dockerfile: Dockerfile
+    container_name: uninotas_sqlserver
+    restart: always
+    ports:
+      - "1433:1433"
+    environment:
+      - ACCEPT_EULA=${ACCEPT_EULA:-Y}
+      - MSSQL_SA_PASSWORD=${MSSQL_SA_PASSWORD}
+      - MSSQL_PID=${MSSQL_PID:-Developer}
+    volumes:
+      - mssql_data:/var/opt/mssql
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P \"${MSSQL_SA_PASSWORD}\" -C -Q \"SELECT 1\" || /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"${MSSQL_SA_PASSWORD}\" -Q \"SELECT 1\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    networks:
+      - uninotas_net
+
+# ------------------------------------------------------------------------------
+# Redes y Volúmenes Persistentes
+# ------------------------------------------------------------------------------
+networks:
+  uninotas_net:
+    driver: bridge
+
+volumes:
+  mssql_data:
+    driver: local
